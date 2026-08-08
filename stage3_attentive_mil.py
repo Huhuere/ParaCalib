@@ -643,25 +643,6 @@ def train_model(
         model.load_state_dict({k: v.to(device) for k, v in best_model_state.items()})
         print(f"\n[Info] Restored best model (val_loss={best_val_loss:.4f})")
 
-    # ── Evaluate train / val for overfitting analysis ────────────────────
-    _train_eval_data = train_ds if isinstance(train_ds, list) else [train_ds.get(i) for i in range(len(train_ds))]
-    _train_eval_loader = DataLoader(
-        _train_eval_data, batch_size=BATCH_SIZE, shuffle=False,
-        collate_fn=hetero_collate, num_workers=0,
-        generator=_make_loader_generator(random_seed, offset=10),
-    )
-    print("\n[Info] Evaluating train set for overfitting analysis ...")
-    _train_metrics = eval_binary_metrics(
-        model, _train_eval_loader, device,
-        threshold=DEFAULT_TEST_THRESHOLD, run_log_path=run_log_path,
-    )
-
-    print("[Info] Evaluating val set for overfitting analysis ...")
-    _val_metrics = eval_binary_metrics(
-        model, val_loader, device,
-        threshold=DEFAULT_TEST_THRESHOLD, run_log_path=run_log_path,
-    )
-
     # ── Test ─────────────────────────────────────────────────────────────
     if test_root_dir and test_labels_csv:
         test_ds = ConversationDataset(root_dir=test_root_dir, labels_csv=test_labels_csv,
@@ -689,32 +670,6 @@ def train_model(
         for line in metrics.get("classification_report", "").strip().split("\n"):
             print(f"  {line}")
             _write_run_log(run_log_path, f"  {line}")
-
-        # ── Overfitting analysis: Train / Val / Test ─────────────────────
-        ov_cols   = ["accuracy", "f1_macro", "auc_roc", "recall_positive", "recall_negative"]
-        ov_labels = ["Accuracy", "F1_Macro", "AUC-ROC", "Sensitivity", "Specificity"]
-        col_w_ov  = 12
-        sep_ov    = "-" * (10 + col_w_ov * len(ov_cols))
-        hdr_ov    = f"{'Split':<10}" + "".join(f"{l:>{col_w_ov}}" for l in ov_labels)
-        ov_title  = f"\nOverfitting Analysis (seed={random_seed}, threshold={DEFAULT_TEST_THRESHOLD})"
-        for _ln in [ov_title, hdr_ov, sep_ov]:
-            print(_ln); _write_run_log(run_log_path, _ln)
-        for split_name, split_m in [("Train", _train_metrics),
-                                     ("Val",   _val_metrics),
-                                     ("Test",  metrics)]:
-            vals = "".join(f"{split_m.get(c, float('nan')):>{col_w_ov}.4f}"
-                           for c in ov_cols)
-            _ln  = f"{split_name:<10}" + vals
-            print(_ln); _write_run_log(run_log_path, _ln)
-        print(sep_ov); _write_run_log(run_log_path, sep_ov)
-
-        # ── Attach train/val metrics to returned dict ────────────────────
-        for _k, _v in _train_metrics.items():
-            if _k != "classification_report":
-                metrics[f"train_{_k}"] = _v
-        for _k, _v in _val_metrics.items():
-            if _k != "classification_report":
-                metrics[f"val_{_k}"] = _v
 
         save_dir  = os.path.dirname(run_log_path) if run_log_path else "."
         save_path = os.path.join(save_dir,
@@ -838,40 +793,6 @@ def _cli():
         print(f"  AUC-ROC     : {df['auc_roc'].mean():.4f} ± {df['auc_roc'].std():.4f}")
         print(f"  Sensitivity : {df['recall_positive'].mean():.4f} ± {df['recall_positive'].std():.4f}")
         print(f"  Specificity : {df['recall_negative'].mean():.4f} ± {df['recall_negative'].std():.4f}\n")
-
-        # ── Overfitting Analysis (averaged across seeds) ──────────────────
-        ov_splits_cli = [
-            ("Train", ["train_accuracy", "train_f1_macro", "train_auc_roc",
-                       "train_recall_positive", "train_recall_negative"]),
-            ("Val",   ["val_accuracy",   "val_f1_macro",   "val_auc_roc",
-                       "val_recall_positive",   "val_recall_negative"]),
-            ("Test",  ["accuracy",       "f1_macro",       "auc_roc",
-                       "recall_positive",       "recall_negative"]),
-        ]
-        ov_col_labels_cli = ["Accuracy", "F1_Macro", "AUC-ROC", "Sensitivity", "Specificity"]
-        col_w_cli = 12
-        sep_cli   = "-" * (10 + col_w_cli * len(ov_col_labels_cli))
-        hdr_cli   = f"{'Split':<10}" + "".join(f"{l:>{col_w_cli}}" for l in ov_col_labels_cli)
-        print(f"\n{sep80}")
-        print(f"Overfitting Analysis — Mean ± Std across {len(all_results)} seeds")
-        print(f"{sep80}")
-        print(hdr_cli)
-        print(sep_cli)
-        for split_name, col_keys in ov_splits_cli:
-            present = [k for k in col_keys if k in df.columns]
-            if not present:
-                continue
-            vals = "".join(
-                f"{df[k].mean():>{col_w_cli}.4f}" if k in df.columns else f"{'N/A':>{col_w_cli}}"
-                for k in col_keys
-            )
-            stds = "".join(
-                f"±{df[k].std():>{col_w_cli-1}.4f}" if k in df.columns else f"{'':>{col_w_cli}}"
-                for k in col_keys
-            )
-            print(f"{split_name:<10}" + vals)
-            print(f"{'':10}" + stds)
-        print(sep_cli)
 
 
 if __name__ == "__main__":
