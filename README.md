@@ -1,6 +1,4 @@
-# ParaCalib
-
-Semantically calibrated paralinguistic modeling for speech-based depression detection.
+# ParaCalib: Semantically Calibrated Paralinguistic Modeling for Depression Detection
 
 ParaCalib uses an audio-language model (ALM) captioner to generate contextualized vocal descriptions from speech. An LLM-based Paralinguistic State Extractor (PSE) then maps these descriptions into structured **SC-Para** states. Finally, an attention-based multiple instance learning (MIL) classifier aggregates utterance-level SC-Para vectors into a subject-level representation for binary depression classification.
 
